@@ -1,0 +1,3 @@
+[submodule "can"]
+	path = can
+	url = https://github.com/sq8kfh/h9avr-can.git
