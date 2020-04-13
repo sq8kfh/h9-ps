@@ -40,6 +40,14 @@
 #define PG_PORT PORTD
 #define PG_PIN PIND
 
+#define BUS_I PC4
+#define BUS_I_DDR DDRC
+#define BUS_I_ADMUX ((1 << MUX3))
+
+#define PWR_I PC5
+#define PWR_I_DDR DDRC
+#define PWR_I_ADMUX ((1 << MUX3)|(1 << MUX0))
+
 //reg
 volatile uint8_t out_power = 0;
 volatile uint8_t bus_power = 0;
@@ -67,11 +75,17 @@ int main(void) {
     BUTTON_DDR &= ~(1 << BUTTON);
     BUTTON_PORT &= ~(1 << BUTTON);
 
+    PWR_I_DDR &= ~(1 << PWR_I);
+    BUS_I_DDR &= ~(1 << BUS_I);
+
     PG_DDR &= ~(1 << PG);
     PG_PORT |= (1 << PG);
 
     uint32_t led_counter = 0x1000;
     uint32_t button_counter = 0;
+
+    ADCSRA = (1<<ADEN) | (1<<ADPS0) /*| (1<<ADPS1)*/ | (1<<ADPS2);
+    ADCSRB = (1 << AREFEN);
 
     while (1) {
         if (led_counter == 0) {
@@ -178,6 +192,9 @@ int main(void) {
                 h9msg_t cm_res;
                 CAN_init_response_msg(&cm, &cm_res);
                 cm_res.data[0] = cm.data[0];
+
+                int32_t tmp;
+
                 switch (cm.data[0]) {
                     case 10:
                         cm_res.dlc = 2;
@@ -187,6 +204,28 @@ int main(void) {
                     case 11:
                         cm_res.dlc = 2;
                         cm_res.data[1] = bus_power;
+                        CAN_put_msg(&cm_res);
+                        break;
+                    case 12:
+                        ADMUX = (1 << ADMUX) | PWR_I_ADMUX;
+                        cm_res.dlc = 3;
+                        ADCSRA |= (1<<ADSC);
+                        while(ADCSRA & (1<<ADSC));
+                        tmp = ADC;
+                        tmp = (tmp - 157) * 1000000 / 39498;
+                        cm_res.data[2] = tmp & 0xff;
+                        cm_res.data[1] = (tmp >> 8) & 0xff;
+                        CAN_put_msg(&cm_res);
+                        break;
+                    case 13:
+                        ADMUX = (1 << ADMUX) | BUS_I_ADMUX;
+                        cm_res.dlc = 3;
+                        ADCSRA |= (1<<ADSC);
+                        while(ADCSRA & (1<<ADSC));
+                        tmp = ADC;
+                        tmp = (tmp - 136) * 100 / 149;
+                        cm_res.data[2] = tmp & 0xff;
+                        cm_res.data[1] = (tmp >> 8) & 0xff;
                         CAN_put_msg(&cm_res);
                         break;
                     default:
